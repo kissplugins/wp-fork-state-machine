@@ -283,3 +283,845 @@ const applyTransition = async (postId, transition) => {
 // Example usage:
 // applyTransition(123, 'invite');
 ```
+
+# Additional WordPress Integration Guidelines for winzou/state-machine
+
+## 🔧 Essential WordPress Wrapper Class
+
+The document mentions creating a wrapper class but doesn't provide a complete example. Here's a robust implementation:
+
+```php
+// in your-plugin/includes/class-wp-post-state-wrapper.php
+
+class WP_Post_State_Wrapper {
+    private $post;
+    private $meta_key;
+    private $default_state;
+
+    public function __construct(WP_Post $post, string $meta_key = '_state', string $default_state = 'draft') {
+        $this->post = $post;
+        $this->meta_key = $meta_key;
+        $this->default_state = $default_state;
+        
+        // Ensure the post has a state set
+        if (!$this->getState()) {
+            $this->setState($default_state);
+        }
+    }
+
+    public function getState(): string {
+        $state = get_post_meta($this->post->ID, $this->meta_key, true);
+        return $state ?: $this->default_state;
+    }
+
+    public function setState(string $state): void {
+        update_post_meta($this->post->ID, $this->meta_key, $state);
+        
+        // Optional: Clear any object caches
+        clean_post_cache($this->post->ID);
+    }
+
+    public function getPost(): WP_Post {
+        return $this->post;
+    }
+
+    public function getId(): int {
+        return $this->post->ID;
+    }
+}
+```
+
+## 📊 Database Considerations
+
+### Migration Helper for Existing Posts
+
+```php
+// Add to your plugin activation hook
+function migrate_existing_posts_to_state_machine() {
+    $posts = get_posts([
+        'post_type' => 'job_application',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            [
+                'key' => '_application_status',
+                'compare' => 'NOT EXISTS'
+            ]
+        ]
+    ]);
+
+    foreach ($posts as $post) {
+        // Set default state for existing posts
+        update_post_meta($post->ID, '_application_status', 'new');
+    }
+}
+register_activation_hook(__FILE__, 'migrate_existing_posts_to_state_machine');
+```
+
+### Database Indexes for Performance
+
+```php
+// Add to your plugin activation
+function add_state_machine_indexes() {
+    global $wpdb;
+    
+    // Add index for faster state queries
+    $wpdb->query("
+        CREATE INDEX idx_postmeta_state 
+        ON {$wpdb->postmeta} (meta_key, meta_value) 
+        WHERE meta_key LIKE '%_status'
+    ");
+}
+```
+
+## 🎯 Advanced WordPress Integration Patterns
+
+### 1. WordPress Query Integration
+
+```php
+// Add custom query vars for filtering by state
+add_filter('query_vars', function($vars) {
+    $vars[] = 'application_state';
+    return $vars;
+});
+
+// Modify main query to filter by state
+add_action('pre_get_posts', function($query) {
+    if (!is_admin() && $query->is_main_query()) {
+        $state = get_query_var('application_state');
+        if ($state) {
+            $query->set('meta_key', '_application_status');
+            $query->set('meta_value', $state);
+        }
+    }
+});
+```
+
+### 2. WordPress Admin List Table Integration
+
+```php
+// Add state column to admin list
+add_filter('manage_job_application_posts_columns', function($columns) {
+    $columns['application_state'] = 'Status';
+    return $columns;
+});
+
+add_action('manage_job_application_posts_custom_column', function($column, $post_id) {
+    if ($column === 'application_state') {
+        $post = get_post($post_id);
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+        
+        echo '<span class="state-badge state-' . esc_attr($state_machine->getState()) . '">'
+           . esc_html(ucfirst($state_machine->getState()))
+           . '</span>';
+        
+        // Show quick actions
+        $transitions = $state_machine->getPossibleTransitions();
+        if (!empty($transitions)) {
+            echo '<div class="row-actions">';
+            foreach ($transitions as $transition) {
+                $url = wp_nonce_url(
+                    add_query_arg(['action' => 'sm_transition', 'transition' => $transition, 'post' => $post_id]),
+                    'sm_transition_' . $post_id
+                );
+                echo '<span><a href="' . esc_url($url) . '">' . esc_html(ucfirst($transition)) . '</a> | </span>';
+            }
+            echo '</div>';
+        }
+    }
+}, 10, 2);
+```
+
+### 3. Bulk Actions Support
+
+```php
+// Add bulk state transitions
+add_filter('bulk_actions-edit-job_application', function($actions) {
+    $actions['bulk_approve'] = 'Bulk Approve';
+    $actions['bulk_reject'] = 'Bulk Reject';
+    return $actions;
+});
+
+add_filter('handle_bulk_actions-edit-job_application', function($redirect_to, $action, $post_ids) {
+    if (strpos($action, 'bulk_') === 0) {
+        $transition = str_replace('bulk_', '', $action);
+        $processed = 0;
+        
+        foreach ($post_ids as $post_id) {
+            $post = get_post($post_id);
+            $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+            $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+            
+            if ($state_machine->can($transition)) {
+                $state_machine->apply($transition);
+                $processed++;
+            }
+        }
+        
+        $redirect_to = add_query_arg('bulk_processed', $processed, $redirect_to);
+    }
+    
+    return $redirect_to;
+}, 10, 3);
+```
+
+## 🔒 Security & Permissions
+
+### Capability-Based Transitions
+
+```php
+class Application_State_Machine {
+    // Add capability checking to your state machine
+    public static function can_user_apply_transition($post_id, $transition, $user_id = null) {
+        if (!$user_id) {
+            $user_id = get_current_user_id();
+        }
+        
+        // Define capability requirements per transition
+        $capabilities = [
+            'screen' => 'edit_applications',
+            'invite' => 'manage_interviews', 
+            'reject' => 'manage_applications',
+            'hire' => 'hire_candidates'
+        ];
+        
+        $required_cap = $capabilities[$transition] ?? 'edit_post';
+        
+        return current_user_can($required_cap, $post_id);
+    }
+}
+
+// Modify your transition handlers to check capabilities
+function handle_application_transition($post_id) {
+    // ... existing nonce and autosave checks ...
+    
+    if (isset($_POST['sm_transition'])) {
+        $transition = sanitize_text_field($_POST['sm_transition']);
+        
+        // Check if user can apply this specific transition
+        if (!Application_State_Machine::can_user_apply_transition($post_id, $transition)) {
+            wp_die(__('You do not have permission to perform this action.'));
+        }
+        
+        // ... rest of the transition logic ...
+    }
+}
+```
+
+## 📈 Logging & Audit Trail
+
+### State Change Logging
+
+```php
+// Add to your state machine callbacks
+public static function log_state_change($event) {
+    $state_machine = $event->getStateMachine();
+    $object = $state_machine->getObject();
+    
+    if ($object instanceof WP_Post_State_Wrapper) {
+        $post = $object->getPost();
+        $user_id = get_current_user_id();
+        
+        // Log the state change
+        add_post_meta($post->ID, '_state_change_log', [
+            'timestamp' => current_time('mysql'),
+            'user_id' => $user_id,
+            'user_name' => get_userdata($user_id)->display_name ?? 'System',
+            'from_state' => $event->getState(),
+            'to_state' => $state_machine->getState(),
+            'transition' => $event->getTransition(),
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '',
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
+        ], false); // false = don't overwrite, create multiple entries
+    }
+}
+```
+
+## 🎨 Frontend Integration
+
+### Shortcode Support
+
+```php
+// Register shortcode for displaying state information
+add_shortcode('application_state', function($atts) {
+    $atts = shortcode_atts([
+        'post_id' => get_the_ID(),
+        'show_transitions' => false,
+        'class' => 'application-state'
+    ], $atts);
+    
+    $post = get_post($atts['post_id']);
+    if (!$post) return '';
+    
+    $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+    $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+    
+    $output = '<div class="' . esc_attr($atts['class']) . '">';
+    $output .= '<span class="current-state">Status: ' . esc_html(ucfirst($state_machine->getState())) . '</span>';
+    
+    if ($atts['show_transitions'] && current_user_can('edit_post', $post->ID)) {
+        $transitions = $state_machine->getPossibleTransitions();
+        if (!empty($transitions)) {
+            $output .= '<div class="available-transitions">';
+            foreach ($transitions as $transition) {
+                $output .= '<button class="transition-btn" data-transition="' . esc_attr($transition) . '" data-post="' . esc_attr($post->ID) . '">';
+                $output .= esc_html(ucfirst($transition));
+                $output .= '</button>';
+            }
+            $output .= '</div>';
+        }
+    }
+    
+    $output .= '</div>';
+    return $output;
+});
+```
+
+## 🛠 Debugging & Development Tools
+
+### Debug Information
+
+```php
+// Add debug information to WordPress admin bar
+add_action('admin_bar_menu', function($wp_admin_bar) {
+    if (!current_user_can('manage_options')) return;
+    
+    global $post;
+    if ($post && $post->post_type === 'job_application') {
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+        
+        $wp_admin_bar->add_node([
+            'id' => 'sm_debug',
+            'title' => 'SM: ' . $state_machine->getState(),
+            'meta' => [
+                'title' => 'Current State: ' . $state_machine->getState() . 
+                          ' | Possible: ' . implode(', ', $state_machine->getPossibleTransitions())
+            ]
+        ]);
+    }
+}, 100);
+```
+
+## 📝 Configuration Management
+
+### Centralized Configuration
+
+```php
+// Create a configuration manager
+class SM_Config_Manager {
+    private static $configs = [];
+    
+    public static function register_config($post_type, $config) {
+        self::$configs[$post_type] = $config;
+    }
+    
+    public static function get_config($post_type) {
+        return self::$configs[$post_type] ?? null;
+    }
+    
+    // Load configs from files or database
+    public static function load_configs() {
+        $config_dir = plugin_dir_path(__FILE__) . 'configs/';
+        foreach (glob($config_dir . '*.php') as $file) {
+            $post_type = basename($file, '.php');
+            self::$configs[$post_type] = include $file;
+        }
+    }
+}
+```
+
+## ⚡ Performance Optimizations
+
+### Caching State Machines
+
+```php
+class Cached_State_Machine_Factory {
+    private static $cache = [];
+    
+    public static function get_state_machine($post, $config_name = null) {
+        $cache_key = $post->ID . '_' . ($config_name ?? $post->post_type);
+        
+        if (!isset(self::$cache[$cache_key])) {
+            // Create and cache the state machine
+            $wrapper = new WP_Post_State_Wrapper($post);
+            self::$cache[$cache_key] = new StateMachine($wrapper, $config);
+        }
+        
+        return self::$cache[$cache_key];
+    }
+    
+    public static function clear_cache($post_id = null) {
+        if ($post_id) {
+            // Clear specific post's cache
+            self::$cache = array_filter(self::$cache, function($key) use ($post_id) {
+                return strpos($key, $post_id . '_') !== 0;
+            }, ARRAY_FILTER_USE_KEY);
+        } else {
+            // Clear all cache
+            self::$cache = [];
+        }
+    }
+}
+
+// Clear cache when post is updated
+add_action('save_post', function($post_id) {
+    Cached_State_Machine_Factory::clear_cache($post_id);
+});
+```
+
+## 🧪 Testing Helpers
+
+### Unit Testing Support
+
+```php
+// Testing helper class
+class SM_Test_Helper {
+    public static function create_test_post($post_type = 'job_application', $initial_state = 'new') {
+        $post_id = wp_insert_post([
+            'post_type' => $post_type,
+            'post_title' => 'Test Application',
+            'post_status' => 'publish'
+        ]);
+        
+        update_post_meta($post_id, '_application_status', $initial_state);
+        
+        return get_post($post_id);
+    }
+    
+    public static function assert_state($post, $expected_state) {
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $actual_state = $wrapper->getState();
+        
+        if ($actual_state !== $expected_state) {
+            throw new Exception("Expected state '{$expected_state}', got '{$actual_state}'");
+        }
+        
+        return true;
+    }
+}
+```
+
+These additions would provide a much more complete foundation for implementing the winzou/state-machine in WordPress, covering enterprise-level concerns like security, performance, debugging, and maintainability that the original document touches on but doesn't fully flesh out.
+
+# Additional WordPress Integration Guidelines for winzou/state-machine
+
+## 🔧 Essential WordPress Wrapper Class
+
+The document mentions creating a wrapper class but doesn't provide a complete example. Here's a robust implementation:
+
+```php
+// in your-plugin/includes/class-wp-post-state-wrapper.php
+
+class WP_Post_State_Wrapper {
+    private $post;
+    private $meta_key;
+    private $default_state;
+
+    public function __construct(WP_Post $post, string $meta_key = '_state', string $default_state = 'draft') {
+        $this->post = $post;
+        $this->meta_key = $meta_key;
+        $this->default_state = $default_state;
+        
+        // Ensure the post has a state set
+        if (!$this->getState()) {
+            $this->setState($default_state);
+        }
+    }
+
+    public function getState(): string {
+        $state = get_post_meta($this->post->ID, $this->meta_key, true);
+        return $state ?: $this->default_state;
+    }
+
+    public function setState(string $state): void {
+        update_post_meta($this->post->ID, $this->meta_key, $state);
+        
+        // Optional: Clear any object caches
+        clean_post_cache($this->post->ID);
+    }
+
+    public function getPost(): WP_Post {
+        return $this->post;
+    }
+
+    public function getId(): int {
+        return $this->post->ID;
+    }
+}
+```
+
+## 📊 Database Considerations
+
+### Migration Helper for Existing Posts
+
+```php
+// Add to your plugin activation hook
+function migrate_existing_posts_to_state_machine() {
+    $posts = get_posts([
+        'post_type' => 'job_application',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            [
+                'key' => '_application_status',
+                'compare' => 'NOT EXISTS'
+            ]
+        ]
+    ]);
+
+    foreach ($posts as $post) {
+        // Set default state for existing posts
+        update_post_meta($post->ID, '_application_status', 'new');
+    }
+}
+register_activation_hook(__FILE__, 'migrate_existing_posts_to_state_machine');
+```
+
+### Database Indexes for Performance
+
+```php
+// Add to your plugin activation
+function add_state_machine_indexes() {
+    global $wpdb;
+    
+    // Add index for faster state queries
+    $wpdb->query("
+        CREATE INDEX idx_postmeta_state 
+        ON {$wpdb->postmeta} (meta_key, meta_value) 
+        WHERE meta_key LIKE '%_status'
+    ");
+}
+```
+
+## 🎯 Advanced WordPress Integration Patterns
+
+### 1. WordPress Query Integration
+
+```php
+// Add custom query vars for filtering by state
+add_filter('query_vars', function($vars) {
+    $vars[] = 'application_state';
+    return $vars;
+});
+
+// Modify main query to filter by state
+add_action('pre_get_posts', function($query) {
+    if (!is_admin() && $query->is_main_query()) {
+        $state = get_query_var('application_state');
+        if ($state) {
+            $query->set('meta_key', '_application_status');
+            $query->set('meta_value', $state);
+        }
+    }
+});
+```
+
+### 2. WordPress Admin List Table Integration
+
+```php
+// Add state column to admin list
+add_filter('manage_job_application_posts_columns', function($columns) {
+    $columns['application_state'] = 'Status';
+    return $columns;
+});
+
+add_action('manage_job_application_posts_custom_column', function($column, $post_id) {
+    if ($column === 'application_state') {
+        $post = get_post($post_id);
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+        
+        echo '<span class="state-badge state-' . esc_attr($state_machine->getState()) . '">'
+           . esc_html(ucfirst($state_machine->getState()))
+           . '</span>';
+        
+        // Show quick actions
+        $transitions = $state_machine->getPossibleTransitions();
+        if (!empty($transitions)) {
+            echo '<div class="row-actions">';
+            foreach ($transitions as $transition) {
+                $url = wp_nonce_url(
+                    add_query_arg(['action' => 'sm_transition', 'transition' => $transition, 'post' => $post_id]),
+                    'sm_transition_' . $post_id
+                );
+                echo '<span><a href="' . esc_url($url) . '">' . esc_html(ucfirst($transition)) . '</a> | </span>';
+            }
+            echo '</div>';
+        }
+    }
+}, 10, 2);
+```
+
+### 3. Bulk Actions Support
+
+```php
+// Add bulk state transitions
+add_filter('bulk_actions-edit-job_application', function($actions) {
+    $actions['bulk_approve'] = 'Bulk Approve';
+    $actions['bulk_reject'] = 'Bulk Reject';
+    return $actions;
+});
+
+add_filter('handle_bulk_actions-edit-job_application', function($redirect_to, $action, $post_ids) {
+    if (strpos($action, 'bulk_') === 0) {
+        $transition = str_replace('bulk_', '', $action);
+        $processed = 0;
+        
+        foreach ($post_ids as $post_id) {
+            $post = get_post($post_id);
+            $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+            $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+            
+            if ($state_machine->can($transition)) {
+                $state_machine->apply($transition);
+                $processed++;
+            }
+        }
+        
+        $redirect_to = add_query_arg('bulk_processed', $processed, $redirect_to);
+    }
+    
+    return $redirect_to;
+}, 10, 3);
+```
+
+## 🔒 Security & Permissions
+
+### Capability-Based Transitions
+
+```php
+class Application_State_Machine {
+    // Add capability checking to your state machine
+    public static function can_user_apply_transition($post_id, $transition, $user_id = null) {
+        if (!$user_id) {
+            $user_id = get_current_user_id();
+        }
+        
+        // Define capability requirements per transition
+        $capabilities = [
+            'screen' => 'edit_applications',
+            'invite' => 'manage_interviews', 
+            'reject' => 'manage_applications',
+            'hire' => 'hire_candidates'
+        ];
+        
+        $required_cap = $capabilities[$transition] ?? 'edit_post';
+        
+        return current_user_can($required_cap, $post_id);
+    }
+}
+
+// Modify your transition handlers to check capabilities
+function handle_application_transition($post_id) {
+    // ... existing nonce and autosave checks ...
+    
+    if (isset($_POST['sm_transition'])) {
+        $transition = sanitize_text_field($_POST['sm_transition']);
+        
+        // Check if user can apply this specific transition
+        if (!Application_State_Machine::can_user_apply_transition($post_id, $transition)) {
+            wp_die(__('You do not have permission to perform this action.'));
+        }
+        
+        // ... rest of the transition logic ...
+    }
+}
+```
+
+## 📈 Logging & Audit Trail
+
+### State Change Logging
+
+```php
+// Add to your state machine callbacks
+public static function log_state_change($event) {
+    $state_machine = $event->getStateMachine();
+    $object = $state_machine->getObject();
+    
+    if ($object instanceof WP_Post_State_Wrapper) {
+        $post = $object->getPost();
+        $user_id = get_current_user_id();
+        
+        // Log the state change
+        add_post_meta($post->ID, '_state_change_log', [
+            'timestamp' => current_time('mysql'),
+            'user_id' => $user_id,
+            'user_name' => get_userdata($user_id)->display_name ?? 'System',
+            'from_state' => $event->getState(),
+            'to_state' => $state_machine->getState(),
+            'transition' => $event->getTransition(),
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '',
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
+        ], false); // false = don't overwrite, create multiple entries
+    }
+}
+```
+
+## 🎨 Frontend Integration
+
+### Shortcode Support
+
+```php
+// Register shortcode for displaying state information
+add_shortcode('application_state', function($atts) {
+    $atts = shortcode_atts([
+        'post_id' => get_the_ID(),
+        'show_transitions' => false,
+        'class' => 'application-state'
+    ], $atts);
+    
+    $post = get_post($atts['post_id']);
+    if (!$post) return '';
+    
+    $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+    $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+    
+    $output = '<div class="' . esc_attr($atts['class']) . '">';
+    $output .= '<span class="current-state">Status: ' . esc_html(ucfirst($state_machine->getState())) . '</span>';
+    
+    if ($atts['show_transitions'] && current_user_can('edit_post', $post->ID)) {
+        $transitions = $state_machine->getPossibleTransitions();
+        if (!empty($transitions)) {
+            $output .= '<div class="available-transitions">';
+            foreach ($transitions as $transition) {
+                $output .= '<button class="transition-btn" data-transition="' . esc_attr($transition) . '" data-post="' . esc_attr($post->ID) . '">';
+                $output .= esc_html(ucfirst($transition));
+                $output .= '</button>';
+            }
+            $output .= '</div>';
+        }
+    }
+    
+    $output .= '</div>';
+    return $output;
+});
+```
+
+## 🛠 Debugging & Development Tools
+
+### Debug Information
+
+```php
+// Add debug information to WordPress admin bar
+add_action('admin_bar_menu', function($wp_admin_bar) {
+    if (!current_user_can('manage_options')) return;
+    
+    global $post;
+    if ($post && $post->post_type === 'job_application') {
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $state_machine = Application_State_Machine::get_state_machine_from_wrapper($wrapper);
+        
+        $wp_admin_bar->add_node([
+            'id' => 'sm_debug',
+            'title' => 'SM: ' . $state_machine->getState(),
+            'meta' => [
+                'title' => 'Current State: ' . $state_machine->getState() . 
+                          ' | Possible: ' . implode(', ', $state_machine->getPossibleTransitions())
+            ]
+        ]);
+    }
+}, 100);
+```
+
+## 📝 Configuration Management
+
+### Centralized Configuration
+
+```php
+// Create a configuration manager
+class SM_Config_Manager {
+    private static $configs = [];
+    
+    public static function register_config($post_type, $config) {
+        self::$configs[$post_type] = $config;
+    }
+    
+    public static function get_config($post_type) {
+        return self::$configs[$post_type] ?? null;
+    }
+    
+    // Load configs from files or database
+    public static function load_configs() {
+        $config_dir = plugin_dir_path(__FILE__) . 'configs/';
+        foreach (glob($config_dir . '*.php') as $file) {
+            $post_type = basename($file, '.php');
+            self::$configs[$post_type] = include $file;
+        }
+    }
+}
+```
+
+## ⚡ Performance Optimizations
+
+### Caching State Machines
+
+```php
+class Cached_State_Machine_Factory {
+    private static $cache = [];
+    
+    public static function get_state_machine($post, $config_name = null) {
+        $cache_key = $post->ID . '_' . ($config_name ?? $post->post_type);
+        
+        if (!isset(self::$cache[$cache_key])) {
+            // Create and cache the state machine
+            $wrapper = new WP_Post_State_Wrapper($post);
+            self::$cache[$cache_key] = new StateMachine($wrapper, $config);
+        }
+        
+        return self::$cache[$cache_key];
+    }
+    
+    public static function clear_cache($post_id = null) {
+        if ($post_id) {
+            // Clear specific post's cache
+            self::$cache = array_filter(self::$cache, function($key) use ($post_id) {
+                return strpos($key, $post_id . '_') !== 0;
+            }, ARRAY_FILTER_USE_KEY);
+        } else {
+            // Clear all cache
+            self::$cache = [];
+        }
+    }
+}
+
+// Clear cache when post is updated
+add_action('save_post', function($post_id) {
+    Cached_State_Machine_Factory::clear_cache($post_id);
+});
+```
+
+## 🧪 Testing Helpers
+
+### Unit Testing Support
+
+```php
+// Testing helper class
+class SM_Test_Helper {
+    public static function create_test_post($post_type = 'job_application', $initial_state = 'new') {
+        $post_id = wp_insert_post([
+            'post_type' => $post_type,
+            'post_title' => 'Test Application',
+            'post_status' => 'publish'
+        ]);
+        
+        update_post_meta($post_id, '_application_status', $initial_state);
+        
+        return get_post($post_id);
+    }
+    
+    public static function assert_state($post, $expected_state) {
+        $wrapper = new WP_Post_State_Wrapper($post, '_application_status');
+        $actual_state = $wrapper->getState();
+        
+        if ($actual_state !== $expected_state) {
+            throw new Exception("Expected state '{$expected_state}', got '{$actual_state}'");
+        }
+        
+        return true;
+    }
+}
+```
+
+---
+
+These additions provide a much more complete foundation for implementing the winzou/state-machine in WordPress, covering enterprise-level concerns like security, performance, debugging, and maintainability that the original document touches on but doesn't fully flesh out.
