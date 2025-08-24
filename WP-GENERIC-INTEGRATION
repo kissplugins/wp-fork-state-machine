@@ -1,0 +1,285 @@
+# Integrating `winzou/state-machine` into a WordPress Plugin
+
+This guide provides an actionable checklist and detailed examples for integrating the `winzou/state-machine` library into a WordPress plugin. It also covers potential challenges and how to interact with the state machine from your JavaScript functions.
+
+-----
+
+## ✅ Actionable To-Do Checklist
+
+  - [ ] **1. Set up Your Development Environment:**
+
+      - [ ] Ensure you have a local WordPress installation.
+      - [ ] Install Composer on your development machine.
+
+  - [ ] **2. Initialize Composer in Your Plugin:**
+
+      - [ ] Navigate to your plugin's directory in the terminal.
+      - [ ] Run `composer init` to create a `composer.json` file.
+      - [ ] Run `composer require winzou/state-machine` to add the library as a dependency.
+
+  - [ ] **3. Include the Composer Autoloader:**
+
+      - [ ] In your main plugin file, add `require_once __DIR__ . '/vendor/autoload.php';`.
+
+  - [ ] **4. Design Your State Machine:**
+
+      - [ ] Identify the object you want to manage (e.g., a custom post type).
+      - [ ] Define all possible states for that object.
+      - [ ] Map out the transitions that can occur between states.
+      - [ ] Plan any guards (conditions) or callbacks (actions) for your transitions.
+
+  - [ ] **5. Create a Centralized State Machine Service:**
+
+      - [ ] Create a PHP class to manage your state machine's configuration and initialization.
+      - [ ] This class should be responsible for returning a configured state machine instance for a given object.
+
+  - [ ] **6. Integrate with WordPress:**
+
+      - [ ] Choose how to store the state (e.g., as post meta for a custom post type).
+      - [ ] Create the user interface elements (e.g., buttons in a metabox) that will trigger transitions.
+      - [ ] Handle the form submissions or AJAX requests to apply transitions.
+
+  - [ ] **7. Implement JavaScript Interaction (Optional):**
+
+      - [ ] If you need to trigger transitions from the frontend, create custom WordPress REST API endpoints.
+      - [ ] Write JavaScript functions that make requests to these endpoints.
+      - [ ] Ensure proper security with nonces and capability checks in your REST API endpoints.
+
+-----
+
+## Sample Code and Approaches
+
+Let's imagine we're building a plugin to manage a "Job Application" custom post type.
+
+### 1️⃣ **State Machine Configuration**
+
+First, create a class to manage your state machine. This keeps your configuration organized and easy to reuse.
+
+```php
+// in your-plugin/includes/class-application-state-machine.php
+
+use SM\Factory\Factory;
+use SM\StateMachine\StateMachineInterface;
+
+class Application_State_Machine {
+
+    private static $factory;
+
+    public static function get_config() {
+        return [
+            'graph' => 'application_workflow',
+            'property_path' => 'post_meta[_application_status][0]',
+            'states' => [
+                'new',
+                'screening',
+                'interviewing',
+                'rejected',
+                'hired',
+            ],
+            'transitions' => [
+                'screen' => ['from' => ['new'], 'to' => 'screening'],
+                'invite' => ['from' => ['screening'], 'to' => 'interviewing'],
+                'reject' => ['from' => ['screening', 'interviewing'], 'to' => 'rejected'],
+                'hire' => ['from' => ['interviewing'], 'to' => 'hired'],
+            ],
+            'callbacks' => [
+                'after' => [
+                    'notify_applicant' => [
+                        'on' => ['reject', 'hire'],
+                        'do' => [__CLASS__, 'notify_applicant'],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    public static function get_factory() {
+        if (!self::$factory) {
+            $configs = [self::get_config()];
+            self::$factory = new Factory($configs);
+        }
+        return self::$factory;
+    }
+
+    public static function get_state_machine(WP_Post $application): StateMachineInterface {
+        return self::get_factory()->get($application, 'application_workflow');
+    }
+
+    // Callback method
+    public static function notify_applicant($event) {
+        $state_machine = $event->getStateMachine();
+        $application = $state_machine->getObject();
+        $applicant_email = get_post_meta($application->ID, '_applicant_email', true);
+        $new_state = $state_machine->getState();
+
+        // In a real plugin, you would send a nicely formatted email
+        wp_mail(
+            $applicant_email,
+            'Your Application Status Update',
+            "Your application status has been updated to: " . $new_state
+        );
+    }
+}
+```
+
+### 2️⃣ **Integrating with the WordPress Admin**
+
+Now, let's add a metabox to the "Job Application" post type to show the current state and possible actions.
+
+```php
+// In your main plugin file or a dedicated admin class
+
+add_action('add_meta_boxes', 'add_application_status_metabox');
+function add_application_status_metabox() {
+    add_meta_box(
+        'application_status',
+        'Application Status',
+        'render_application_status_metabox',
+        'job_application', // Your custom post type slug
+        'side',
+        'high'
+    );
+}
+
+function render_application_status_metabox($post) {
+    wp_nonce_field('application_transition', 'application_nonce');
+    $state_machine = Application_State_Machine::get_state_machine($post);
+    $current_state = $state_machine->getState();
+    $possible_transitions = $state_machine->getPossibleTransitions();
+
+    echo "<strong>Current Status:</strong> " . esc_html($current_state);
+
+    if (!empty($possible_transitions)) {
+        echo '<h4>Actions:</h4>';
+        foreach ($possible_transitions as $transition) {
+            echo '<button type="submit" name="sm_transition" value="' . esc_attr($transition) . '">'
+               . esc_html(ucfirst($transition))
+               . '</button>';
+        }
+    } else {
+        echo "<p>No further actions available.</p>";
+    }
+}
+
+add_action('save_post_job_application', 'handle_application_transition');
+function handle_application_transition($post_id) {
+    if (!isset($_POST['application_nonce']) || !wp_verify_nonce($_POST['application_nonce'], 'application_transition')) {
+        return;
+    }
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+        return;
+    }
+    if (!current_user_can('edit_post', $post_id)) {
+        return;
+    }
+    if (isset($_POST['sm_transition'])) {
+        $post = get_post($post_id);
+        $state_machine = Application_State_Machine::get_state_machine($post);
+        $transition = sanitize_text_field($_POST['sm_transition']);
+
+        if ($state_machine->can($transition)) {
+            $state_machine->apply($transition);
+            // The state is automatically saved due to the 'property_path'
+        }
+    }
+}
+```
+
+-----
+
+## 🤯 Possible Difficulties and Solutions
+
+  * **Difficulty:** The `property_path` is not working with `WP_Post`.
+
+      * **Solution:** The `symfony/property-access` component, which this library uses, can't directly access WordPress meta values. You need a way to bridge this. In the example above, `post_meta[_application_status][0]` is a workaround that relies on how `WP_Post`'s magic `__get` works. A more robust solution is to create a wrapper class for your `WP_Post` object that has explicit getter and setter methods for the state, and use that wrapper as the object for the state machine.
+
+  * **Difficulty:** I get a "class not found" error.
+
+      * **Solution:** This almost always means the Composer autoloader is not being included correctly. Double-check that `require_once __DIR__ . '/vendor/autoload.php';` is at the top of your main plugin file and the path is correct.
+
+  * **Difficulty:** Managing state machine configurations for multiple custom post types becomes messy.
+
+      * **Solution:** Abstract your state machine logic. Create a base state machine class and extend it for each custom post type. This allows you to have a common structure while keeping configurations separate and organized.
+
+-----
+
+## 🤖 How This Works with JS Functions
+
+To interact with your state machine from the frontend with JavaScript (e.g., in a React-based admin interface or a frontend user dashboard), you'll need to create custom REST API endpoints.
+
+### 1️⃣ **Create REST API Endpoints**
+
+```php
+// In your main plugin file or a dedicated API class
+
+add_action('rest_api_init', function () {
+    register_rest_route('my-plugin/v1', '/applications/(?P<id>\d+)/transition', [
+        'methods' => 'POST',
+        'callback' => 'handle_api_transition',
+        'permission_callback' => function ($request) {
+            return current_user_can('edit_post', $request['id']);
+        },
+    ]);
+});
+
+function handle_api_transition(WP_REST_Request $request) {
+    $post_id = $request['id'];
+    $transition = $request->get_param('transition');
+    $post = get_post($post_id);
+
+    if (!$post || $post->post_type !== 'job_application') {
+        return new WP_Error('not_found', 'Application not found', ['status' => 404]);
+    }
+
+    $state_machine = Application_State_Machine::get_state_machine($post);
+
+    if ($state_machine->can($transition)) {
+        $state_machine->apply($transition);
+        return new WP_REST_Response([
+            'success' => true,
+            'new_state' => $state_machine->getState()
+        ], 200);
+    } else {
+        return new WP_Error(
+            'transition_failed',
+            "Cannot apply transition '{$transition}' from state '{$state_machine->getState()}'",
+            ['status' => 400]
+        );
+    }
+}
+```
+
+### 2️⃣ **JavaScript Example**
+
+Now you can call this endpoint from your JavaScript. Here's a simple example using the Fetch API. You would need to make sure to include the WordPress REST API nonce.
+
+```javascript
+// This assumes you've used wp_localize_script to pass the nonce and API URL to your script.
+
+const applyTransition = async (postId, transition) => {
+    try {
+        const response = await fetch(`${myPlugin.apiUrl}my-plugin/v1/applications/${postId}/transition`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-WP-Nonce': myPlugin.nonce // This is crucial for security
+            },
+            body: JSON.stringify({ transition: transition })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            console.log(`Successfully transitioned to: ${data.new_state}`);
+            // You would update your UI here
+        } else {
+            console.error(`Failed to apply transition: ${data.message}`);
+        }
+    } catch (error) {
+        console.error('An error occurred:', error);
+    }
+};
+
+// Example usage:
+// applyTransition(123, 'invite');
+```
