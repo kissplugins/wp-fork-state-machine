@@ -33,3 +33,25 @@ spl_autoload_register( function ( $class ) {
         require_once $file;
     }
 } );
+
+// Expose a factory helper so other plugins can easily build state machines.
+if ( ! function_exists( 'wp_fsm_factory' ) ) {
+    /**
+     * Returns a shared instance of the state machine Factory.
+     *
+     * Other plugins can hook the `wp_fsm_factory_configs` filter to provide
+     * graph configurations before the factory is instantiated.
+     *
+     * @return \SM\Factory\Factory
+     */
+    function wp_fsm_factory() {
+        static $factory = null;
+
+        if ( null === $factory ) {
+            $configs = apply_filters( 'wp_fsm_factory_configs', array() );
+            $factory = new \SM\Factory\Factory( $configs );
+        }
+
+        return $factory;
+    }
+}

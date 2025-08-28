@@ -12,6 +12,33 @@ This plugin exposes the [winzou/state-machine](https://github.com/winzou/StateMa
 
 Other plugins can now instantiate and configure state machines using the classes under the `SM` namespace. See `WP-GENERIC-INTEGRATION.md` for a detailed guide on integrating the library with custom post types, REST endpoints and UI elements.
 
+### Service Function
+
+The plugin exposes a helper function `wp_fsm_factory()` that returns a shared
+`SM\Factory\Factory` instance. Use the `wp_fsm_factory_configs` filter to add
+your own graphs before calling the function:
+
+```php
+add_filter( 'wp_fsm_factory_configs', function( $configs ) {
+    $configs[] = array(
+        'class'         => My_Object::class,
+        'graph'         => 'my_graph',
+        'property_path' => 'state',
+        // states and transitions here
+    );
+    return $configs;
+} );
+
+$factory = wp_fsm_factory();
+$sm      = $factory->get( $object, 'my_graph' );
+```
+
+### Proof of Concept Admin Page
+
+A demonstration plugin lives in `examples/wp-fsm-poc.php`. Activate it alongside
+the autoloader to add an **FSM Demo** page to the WordPress admin, showcasing
+transitions with radio buttons and a confirmation checkbox.
+
 ## Developer Notes
 
 - The autoloader maps the `SM\` namespace to `src/SM/`.
