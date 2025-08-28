@@ -105,3 +105,34 @@ Guarding callbacks must return a `bool`. If a guard returns `false`, a transitio
 ##### Credits
 
 This library has been highly inspired by [https://github.com/yohang/Finite](https://github.com/yohang/Finite), but has taken another direction.
+
+WordPress Integration
+----------------------
+
+This repository ships with a helper plugin that exposes the state machine
+factory to WordPress. Activating `wp-fsm-autoloader.php` registers a global
+`wp_fsm_factory()` function. Other plugins may hook the
+`wp_fsm_factory_configs` filter to supply graph configurations before
+requesting a factory instance:
+
+```php
+add_filter( 'wp_fsm_factory_configs', function( $configs ) {
+    $configs[] = array(
+        'class'         => My_Object::class,
+        'graph'         => 'my_graph',
+        'property_path' => 'state',
+        // ... states and transitions
+    );
+    return $configs;
+} );
+
+$factory = wp_fsm_factory();
+$sm      = $factory->get( $object, 'my_graph' );
+```
+
+### Demo Admin Page
+
+A proof‑of‑concept plugin lives in `examples/wp-fsm-poc.php`. When activated it
+adds an **FSM Demo** page under the WordPress admin menu. The page shows the
+current state and lets you trigger transitions using radio buttons with a
+confirmation checkbox.
