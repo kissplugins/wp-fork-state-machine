@@ -6,6 +6,27 @@ The era of hard-coded states is over!
 
 [![Build](https://github.com/winzou/state-machine/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/winzou/state-machine/actions/workflows/build.yml)
 
+WordPress Plugin
+----------------
+
+This repository also ships with a simple WordPress plugin that makes the
+state machine library available to other plugins and includes a demo page to
+experiment with it.
+
+### Service Function
+
+Activate the plugin and call `wp_fsm_factory()` from anywhere in WordPress to
+retrieve a shared `SM\Factory\Factory` instance. Other plugins may register
+their own configurations via `$factory->addConfig( $config )` and obtain state
+machines with `$factory->get( $object, $graph )`.
+
+### Demo Admin Page
+
+After activating the plugin, navigate to **Tools → FSM Demo** in the WordPress
+admin. The page shows the current state and lets you trigger transitions using
+radio buttons and a checkbox. It serves as a basic proof of concept for the
+state machine.
+
 Installation (via composer)
 ---------------
 
