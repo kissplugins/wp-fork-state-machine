@@ -179,3 +179,19 @@ export const uploadMachine = createMachine({
 - Do I need history/rollback? → **Use FSM**
 - Is it just CRUD with hooks? → **Skip FSM**
 - Managing async workflows? → **Use FSM**
+
+---
+
+## ❓ FAQ
+
+**Q1: Is it easy to fall out of being disciplined about staying within the FSM or being FSM-centric/FSM-first?**  
+Yes. It’s common to see developers add quick `if/else` checks or ad-hoc flags that bypass the FSM. This leads to hidden state transitions, contradictions, and bugs. Discipline means routing all transitions through the FSM layer, even if it feels heavier up front.
+
+**Q2: Why should I have an FSM-first approach?**  
+Because it enforces **clarity, consistency, and testability**. An FSM-first approach ensures every possible state and transition is explicit. This reduces unexpected edge cases, improves observability (via transition logs), and makes it easier to extend features without spaghetti logic.
+
+**Q3: Give me an example of what a tough decision between keeping a function in the FSM or going outside of it?**  
+A common dilemma: should an **email notification** be sent as part of the FSM transition, or triggered separately?  
+- If sending the email is **integral** to the business process (e.g., confirming an order), it belongs inside the FSM transition so success/failure can affect state.  
+- If it’s a **side convenience** (e.g., optional admin notification), it can be triggered as a listener outside the FSM.  
+The rule of thumb: if failure to complete the action invalidates the state transition, keep it inside the FSM. Otherwise, decouple it.
