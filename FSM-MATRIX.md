@@ -195,3 +195,18 @@ A common dilemma: should an **email notification** be sent as part of the FSM tr
 - If sending the email is **integral** to the business process (e.g., confirming an order), it belongs inside the FSM transition so success/failure can affect state.  
 - If it’s a **side convenience** (e.g., optional admin notification), it can be triggered as a listener outside the FSM.  
 The rule of thumb: if failure to complete the action invalidates the state transition, keep it inside the FSM. Otherwise, decouple it.
+
+**Q4: Is there a FSM already built into WP?**  
+WordPress does not ship with a generic FSM library. However, several parts of WP core behave like FSMs:
+- **Post Statuses** (`draft`, `pending`, `publish`, etc.) form a state model with defined transitions.
+- **Comment Moderation** (`hold`, `approved`, `spam`, `trash`) is also a simple FSM.
+- **Customizer Live Preview** (draft → preview → publish) is a state machine pattern.
+These are not generalized FSMs, but domain-specific state flows.
+
+**Q5: Is there a FSM system in WP that I can leverage for my own use?**  
+You can extend or hook into WordPress’s existing state-like systems:
+- **Post Status API**: register custom statuses (`register_post_status`) to build editorial workflows.
+- **WooCommerce Order States**: already an FSM; extend with custom sub-states.
+- **WP Cron Events**: scheduling and retries mimic FSM transitions.
+- **Gutenberg Data Stores**: not an FSM but can complement one with centralized state.
+If you want a **general FSM**, you’ll need to implement or import one (e.g., XState in JS, or a PHP FSM library), but WP’s patterns give you anchor points to integrate FSM thinking into plugin development.
