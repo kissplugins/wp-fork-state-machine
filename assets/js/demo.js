@@ -309,7 +309,7 @@
       const pill = el('decision-pill');
       pill.className = `pill ${style}`;
       pill.textContent = `Result: ${verdict}`;
-      el('decision-explain').textContent = explain;
+      el('decision-explain').textContent = explain || 'Check some boxes above and click "Explain" to see detailed reasoning';
     }
 
     scoreInputs.forEach(inp=> inp.addEventListener('change', ()=>{ updateDecision(); persist(); }));

@@ -1,4 +1,25 @@
 <div class="fsm-demo">
+  <header style="margin-bottom: 20px;">
+    <h1 style="margin: 0 0 8px; font-size: 28px; color: #fff;">FSM Demo</h1>
+    <p style="margin: 0 0 12px; color: #9ca3af;">Interactive finite state machine demonstration with decision-making tools</p>
+    <div class="tech-stack">
+      <p class="hint" style="margin: 0; padding: 8px 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 8px;">
+        <strong>Tech Stack:</strong> Backend powered by <code>winzou/state-machine</code> library with WordPress REST API integration.
+        Frontend features custom JavaScript FSM engine with async state synchronization and dual-mode operation (True FSM vs FSM-like).
+      </p>
+    </div>
+  </header>
+
+  <div class="instructions" style="margin-bottom: 20px; padding: 12px; background: rgba(34, 211, 238, 0.08); border: 1px solid rgba(34, 211, 238, 0.25); border-radius: 8px;">
+    <p class="hint" style="margin: 0 0 8px; font-weight: 600; color: #22d3ee;">How to Use:</p>
+    <p class="hint" style="margin: 0;">
+      1. <strong>Score your scenario</strong> by checking relevant boxes in the Decision Maker panel
+      2. Click <strong>"Explain"</strong> to see detailed reasoning below the buttons
+      3. Click <strong>"Apply to Simulator"</strong> to automatically set the FSM mode based on your score
+      4. Test state transitions in the FSM Simulator panel using the event buttons
+    </p>
+  </div>
+
   <div class="grid" id="app">
     <!-- Decision Maker -->
     <section class="card" id="decision-card" aria-labelledby="decision-title">
@@ -28,7 +49,7 @@
           <button class="btn-brand" id="apply-btn" title="Apply to simulator">Apply to Simulator</button>
           <button id="reset-score" class="btn">Reset</button>
         </div>
-        <div id="decision-explain" class="hint" style="margin-top:8px"></div>
+        <div id="decision-explain" class="hint" style="margin-top:8px; padding: 8px; background: rgba(99, 102, 241, 0.05); border-radius: 6px; min-height: 20px; font-style: italic;" aria-live="polite"></div>
       </div>
     </section>
 
