@@ -5,6 +5,14 @@
     function el(id){return document.getElementById(id)}
     function ceil(n){return Math.max(0,Math.ceil(n))}
 
+    // API configuration
+    const apiConfig = window.fsm_demo_data || {
+        api_url: '/wp-json/kiss-fsm/v1/',
+        nonce: ''
+    };
+
+    let currentJobId = null;
+
     // --- FSM definition (kept entirely in JS for this session) ---
     const fsmConfig = {
       states: ['idle','uploading','processing','failed_retryable','retrying','done','failed_permanent'],
@@ -44,12 +52,13 @@
       locked: false,
       queue: [],
       modeTrue: true, // true = True FSM; false = FSM-like
-      dispatch(event){
+      async dispatch(event){
         if(this.locked){ logPush('warn', `Engine locked; queued event ${event}`); this.queue.push(event); updateStatus(); return; }
         this.locked = true; updateStatus();
         const from = this.state;
         const next = (fsmConfig.transitions[from]||{})[event];
         const allowed = next !== undefined;
+
         if(!this.modeTrue){
           // FSM-like: allow any mutation; pick next if defined, else mutate to event name as a pretend state (demo of danger)
           if(allowed){
@@ -61,11 +70,83 @@
             this.commit(from, event, {mutated:true}); // stay put but show risk
           }
         } else {
-          if(!allowed){ this.locked=false; updateStatus(); logPush('err', `Illegal event '${event}' from '${from}' (blocked)`); this.drain(); return; }
+          // True FSM mode - call backend API
+          if(!allowed){
+            this.locked=false;
+            updateStatus();
+            logPush('err', `Illegal event '${event}' from '${from}' (blocked)`);
+            this.drain();
+            return;
+          }
+
           const ok = this.guardOK(from,next,event,true);
-          if(!ok){ this.locked=false; updateStatus(); this.drain(); return; }
-          this.commit(next, event, {allowed:true});
+          if(!ok){
+            this.locked=false;
+            updateStatus();
+            this.drain();
+            return;
+          }
+
+          // Call backend API for true FSM mode
+          try {
+            await this.callBackendTransition(event);
+          } catch (error) {
+            logPush('err', `Backend transition failed: ${error.message}`);
+            this.locked = false;
+            updateStatus();
+            this.drain();
+          }
         }
+      },
+
+      async callBackendTransition(event) {
+        if (!currentJobId) {
+          // Create a new job first
+          currentJobId = await this.createJob();
+          logPush('info', `Created new job: ${currentJobId}`);
+        }
+
+        const response = await fetch(`${apiConfig.api_url}jobs/${currentJobId}/transition`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-WP-Nonce': apiConfig.nonce
+          },
+          body: JSON.stringify({ event })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        logPush('info', `Backend transition: ${result.from} → ${result.to}`, result);
+
+        // Update frontend state to match backend
+        this.commit(result.to, event, {
+          allowed: true,
+          backend: true,
+          from: result.from,
+          transition: result.transition
+        });
+      },
+
+      async createJob() {
+        const response = await fetch(`${apiConfig.api_url}jobs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-WP-Nonce': apiConfig.nonce
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to create job: HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        return result.id;
       },
       guardOK(from,to,event,blocking){
         const key = `${from}->${to}`;
@@ -135,7 +216,13 @@
 
     // Event buttons
     document.querySelectorAll('#event-buttons button').forEach(btn=>{
-      btn.addEventListener('click', ()=> engine.dispatch(btn.dataset.ev));
+      btn.addEventListener('click', async ()=> {
+        try {
+          await engine.dispatch(btn.dataset.ev);
+        } catch (error) {
+          logPush('err', `Event dispatch failed: ${error.message}`);
+        }
+      });
     });
 
     // Mode toggle
@@ -143,15 +230,32 @@
       engine.modeTrue = !e.target.checked; // checked = FSM-like
       el('mode-label').textContent = engine.modeTrue? 'True FSM':'FSM-like';
       logPush('info', `Mode set to ${engine.modeTrue? 'True FSM':'FSM-like'}`);
+
+      // Reset job when switching modes
+      if (engine.modeTrue && currentJobId) {
+        currentJobId = null;
+        logPush('info', 'Job reset for True FSM mode');
+      }
+
       updateButtons();
       persist();
     });
 
     // Double fire
-    el('double-fire').addEventListener('click', ()=>{
+    el('double-fire').addEventListener('click', async ()=>{
       // attempt to fire SUCCESS and FAIL_TEMP at same time
-      dispatch('SUCCESS');
-      setTimeout(()=> dispatch('FAIL_TEMP'), 0);
+      try {
+        await engine.dispatch('SUCCESS');
+        setTimeout(async ()=> {
+          try {
+            await engine.dispatch('FAIL_TEMP');
+          } catch (error) {
+            logPush('err', `Second dispatch failed: ${error.message}`);
+          }
+        }, 0);
+      } catch (error) {
+        logPush('err', `First dispatch failed: ${error.message}`);
+      }
     });
 
     // Clear log & export
@@ -223,6 +327,7 @@
       const data = {
         state: engine.state,
         modeTrue: engine.modeTrue,
+        jobId: currentJobId,
         scores: readScores(),
         guards: { fileOk: el('g-file-ok').checked, optimizeOk: el('g-optimize-ok').checked },
         observers: { email: el('obs-email').checked, webhook: el('obs-webhook').checked, job: el('obs-job').checked },
@@ -237,6 +342,7 @@
     function restore(){
       const data = load();
       if(data && data.state){ engine.state = data.state; }
+      if(data.jobId){ currentJobId = data.jobId; }
       if(typeof data.modeTrue==='boolean'){ engine.modeTrue = data.modeTrue; el('mode-toggle').checked = !engine.modeTrue; el('mode-label').textContent = engine.modeTrue? 'True FSM':'FSM-like'; }
       if(data.guards){ el('g-file-ok').checked = !!data.guards.fileOk; el('g-optimize-ok').checked = !!data.guards.optimizeOk; }
       if(data.observers){ el('obs-email').checked = !!data.observers.email; el('obs-webhook').checked = !!data.observers.webhook; el('obs-job').checked = !!data.observers.job; }
@@ -246,4 +352,8 @@
     }
 
     // --- Utilities ---
-    function escapeHtml(s){ return s && s.replace(/[&<>
+    function escapeHtml(s){ return s && s.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+    // --- Initialize ---
+    restore();
+  })();

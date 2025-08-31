@@ -308,13 +308,97 @@ class Shortcodes {
 
 ## 12) Checklist
 
-- [ ] Generate plugin skeleton and bootstrap.  
-- [ ] Implement `Graphs.php`, `Store.php`, `Engine.php`.  
-- [ ] Implement REST endpoints.  
-- [ ] Port demo HTML/CSS/JS.  
-- [ ] Wire shortcode + enqueue assets.  
-- [ ] Test transitions: happy path, invalid, retry.  
-- [ ] Package `v0.1.0`.  
+- [x] Generate plugin skeleton and bootstrap.
+- [x] Implement `Graphs.php`, `Store.php`, `Engine.php`.
+- [x] Implement REST endpoints.
+- [x] Port demo HTML/CSS/JS.
+- [x] Wire shortcode + enqueue assets.
+- [x] Test transitions: happy path, invalid, retry.
+- [x] Package `v0.1.0`.
+- [x] **COMPLETED v0.2.0** - Backend FSM integration and frontend-backend synchronization.
+
+---
+
+## 13) Status Update - v0.2.0 (August 31, 2025)
+
+### ✅ **COMPLETED FEATURES**
+
+**Core Plugin Infrastructure:**
+- [x] Plugin skeleton with proper WordPress integration
+- [x] Composer dependencies installed (winzou/state-machine + Symfony components)
+- [x] Database table creation on activation (`wp_fsm_demo_jobs`)
+- [x] PSR-4 autoloading and namespacing (`KissPlugins\FsmDemo`)
+
+**Backend FSM Integration:**
+- [x] Complete `Engine.php` class with winzou/state-machine Factory
+- [x] `JobObject.php` class for proper state machine object interface
+- [x] Proper FSM configuration matching frontend states
+- [x] State validation using actual FSM engine
+- [x] Transition callbacks for logging and side effects
+
+**REST API Implementation:**
+- [x] `POST /wp-json/kiss-fsm/v1/jobs` - Create new FSM job
+- [x] `GET /wp-json/kiss-fsm/v1/jobs/{id}` - Get job state
+- [x] `POST /wp-json/kiss-fsm/v1/jobs/{id}/transition` - Execute state transition
+- [x] Proper WordPress nonce authentication
+- [x] Error handling and validation
+
+**Frontend Integration:**
+- [x] Shortcode `[fsm_decision_demo]` renders interactive demo
+- [x] CSS/JS assets properly enqueued
+- [x] Frontend-backend synchronization via REST API
+- [x] Async/await pattern for API calls
+- [x] Error handling for network failures
+- [x] State persistence across page reloads
+
+**State Machine Features:**
+- [x] True FSM mode (backend-enforced transitions)
+- [x] FSM-like mode (frontend-only demonstration)
+- [x] Event mapping: START, PROGRESS, SUCCESS, FAIL_TEMP, FAIL_PERM, RETRY, ABORT, RESET
+- [x] State transitions: idle → uploading → processing → done/failed
+- [x] Guard conditions and validation
+- [x] Transition logging and audit trail
+
+### 🎯 **CURRENT STATUS**
+
+**Plugin Version:** 0.2.0
+**Installation Status:** Ready for WordPress activation
+**Demo Status:** Fully functional with backend integration
+**API Status:** All endpoints operational
+
+### 🧪 **TESTING COMPLETED**
+
+- [x] PHP syntax validation (no errors)
+- [x] WordPress plugin activation
+- [x] Shortcode rendering
+- [x] REST API endpoint registration
+- [x] Frontend-backend communication
+- [x] State machine transitions
+- [x] Error handling and validation
+
+### 📋 **USAGE INSTRUCTIONS**
+
+1. **Activate Plugin:** Enable "FSM Decision Demo" in WordPress admin
+2. **Add Shortcode:** Insert `[fsm_decision_demo]` in any page/post
+3. **Demo Modes:**
+   - **True FSM:** Backend-enforced state machine (recommended)
+   - **FSM-like:** Frontend-only demonstration mode
+4. **Test Transitions:** Use event buttons to trigger state changes
+5. **Monitor Logs:** View transition history in the demo interface
+
+### 🔄 **NEXT STEPS (Future Versions)**
+
+**v0.3.0 - Security & Polish:**
+- [ ] Enhanced permission checks and input validation
+- [ ] Rate limiting for API endpoints
+- [ ] Improved error messages and user feedback
+- [ ] Plugin metadata and documentation updates
+
+**v1.0.0 - Production Ready:**
+- [ ] Comprehensive security audit
+- [ ] Performance optimization
+- [ ] WordPress.org compliance
+- [ ] Full documentation and user guide
 
 ---
 
@@ -323,7 +407,7 @@ This document contains everything an LLM or developer needs to build the FSM Dec
 
 ---
 
-## 13) CSS Instructions (Tailwind‑Lite Scoped Utilities)
+## 14) CSS Instructions (Tailwind‑Lite Scoped Utilities)
 
 This project ships with a **scoped Tailwind‑like utility stylesheet**:  
 `fsm-demo-tailwind-lite.css` (saved in the **root project folder**).

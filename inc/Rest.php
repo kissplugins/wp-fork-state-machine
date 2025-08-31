@@ -1,8 +1,6 @@
 <?php
 namespace KissPlugins\FsmDemo;
 
-use SM\Factory\Factory;
-
 class Rest {
     public static function init() {
         add_action('rest_api_init', [__CLASS__, 'register_routes']);
@@ -52,32 +50,67 @@ class Rest {
         $job_id = $req->get_param('id');
         $event = $req->get_param('event');
 
-        $job = Store::getJob($wpdb, $job_id);
+        if (!$job_id || !$event) {
+            return new \WP_Error('missing_params', 'Job ID and event are required', ['status' => 400]);
+        }
 
-        $graph = Graphs::media_upload();
+        // Get job from database
+        $jobData = Store::getJob($wpdb, $job_id);
+        if (!$jobData) {
+            return new \WP_Error('job_not_found', 'Job not found', ['status' => 404]);
+        }
 
-        $factory = new Factory($graph);
-        $statemachine = $factory->get($job, 'state');
+        // Create job object for state machine
+        $jobObject = Engine::createJobObject($jobData);
 
-        if ($statemachine->can($event)) {
-            $statemachine->apply($event);
-            $wpdb->update(
-                $wpdb->prefix . 'fsm_demo_jobs',
-                [
-                    'state' => $job->state,
-                    'updated_at' => current_time('mysql', 1),
-                ],
-                ['id' => $job_id]
-            );
+        try {
+            // Get state machine
+            $stateMachine = Engine::getStateMachine($jobObject);
 
-            return new \WP_REST_Response([
-                'from' => $statemachine->getTransition()->getFromState(),
-                'to' => $statemachine->getTransition()->getToState(),
-                'state' => $job->state,
-                'allowed' => array_keys($statemachine->getPossibleTransitions()),
-            ], 200);
-        } else {
-            return new \WP_Error('transition_not_allowed', 'Transition not allowed', ['status' => 400]);
+            // Map frontend events to backend transitions
+            $transitionMap = [
+                'START' => 'start',
+                'PROGRESS' => 'progress',
+                'SUCCESS' => 'success_upload',
+                'FAIL_TEMP' => 'fail_temp',
+                'FAIL_PERM' => 'fail_perm',
+                'RETRY' => 'retry',
+                'ABORT' => 'abort',
+                'RESET' => 'reset'
+            ];
+
+            $transition = $transitionMap[$event] ?? $event;
+
+            if ($stateMachine->can($transition)) {
+                $fromState = $stateMachine->getState();
+                $stateMachine->apply($transition);
+                $toState = $stateMachine->getState();
+
+                // Add log entry
+                $jobObject->addLogEntry('info', "Transition: {$event}", [
+                    'from' => $fromState,
+                    'to' => $toState,
+                    'transition' => $transition
+                ]);
+
+                // Update database
+                Store::updateJob($wpdb, $job_id, $jobObject);
+
+                return new \WP_REST_Response([
+                    'success' => true,
+                    'from' => $fromState,
+                    'to' => $toState,
+                    'state' => $toState,
+                    'allowed' => array_keys($stateMachine->getPossibleTransitions()),
+                    'event' => $event,
+                    'transition' => $transition
+                ], 200);
+            } else {
+                return new \WP_Error('transition_not_allowed', "Transition '{$transition}' not allowed from state '{$stateMachine->getState()}'", ['status' => 400]);
+            }
+        } catch (\Exception $e) {
+            error_log("FSM Transition Error: " . $e->getMessage());
+            return new \WP_Error('fsm_error', 'State machine error: ' . $e->getMessage(), ['status' => 500]);
         }
     }
 }
