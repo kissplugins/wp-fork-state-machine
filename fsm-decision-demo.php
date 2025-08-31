@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: FSM Decision Demo
+ * Plugin Name: KISS - FSM Decision Demo
  * Description: An interactive FSM Decision Maker demo as a WordPress plugin.
  * Version: 0.2.0
  * Author: Gemini
