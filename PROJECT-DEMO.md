@@ -318,3 +318,43 @@ class Shortcodes {
 ---
 
 This document contains everything an LLM or developer needs to build the FSM Decision Maker demo plugin as a shortcode-based WordPress demo.
+
+
+---
+
+## 13) CSS Instructions (Tailwind‑Lite Scoped Utilities)
+
+This project ships with a **scoped Tailwind‑like utility stylesheet**:  
+`fsm-demo-tailwind-lite.css` (saved in the **root project folder**).
+
+### Why Scoped CSS?
+- All utilities and components are **scoped under `.fsm-demo`** to avoid interfering with WordPress core or theme styles.
+- Provides a Tailwind‑like experience (flex/grid utilities, spacing, colors, buttons, cards, pills, switches, log panels).
+- Matches the dark UI palette used in the demo.
+
+### How to Use
+1. Enqueue the stylesheet from the root of the plugin:
+
+```php
+wp_enqueue_style(
+  'fsm-demo-css',
+  plugins_url('fsm-demo-tailwind-lite.css', __FILE__),
+  [],
+  FSM_DEMO_VERSION
+);
+```
+
+2. Wrap all demo markup with a container class:
+
+```html
+<div class="fsm-demo">
+  <!-- Your FSM demo UI here -->
+</div>
+```
+
+3. All styles (e.g., `.card`, `.btn`, `.pill`, `.log`) will now apply only inside `.fsm-demo`.
+
+### Optional
+- A minified copy (`fsm-demo-tailwind-lite.min.css`) can be generated for production.
+- The utilities are designed to be composable: combine `.flex`, `.gap-2`, `.items-center`, etc. as in Tailwind.
+
