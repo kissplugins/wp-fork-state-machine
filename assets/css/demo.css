@@ -7,7 +7,31 @@
     h1 { margin: 0 0 2px; font-size: 28px }
     .sub { margin: 0 0 20px; color: var(--muted) }
     .grid { display: grid; grid-template-columns: 360px 1fr 420px; gap: 18px }
-    @media (max-width: 1200px) { .grid { grid-template-columns: 1fr } }
+
+    /* Responsive breakpoints for better stacking */
+    @media (max-width: 1400px) {
+      .grid { grid-template-columns: 320px 1fr 380px; gap: 16px }
+    }
+
+    @media (max-width: 1200px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .grid > :nth-child(3) {
+        grid-column: 1 / -1; /* Behind the scenes spans full width */
+      }
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .grid > :nth-child(3) {
+        grid-column: auto; /* Reset for mobile */
+      }
+    }
     .card { background: linear-gradient(180deg, #0b1020, #0a0f1e 70%); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow) }
     .card h2 { font-size: 16px; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); color: #fff; background: linear-gradient(90deg, rgba(99, 102, 241, .15), rgba(34, 211, 238, .08)) }
     .card .body { padding: 14px }
@@ -30,6 +54,11 @@
     .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .2s }
     .switch input:checked::after { left: 20px }
     .kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 }
+
+    /* Responsive KPI grid */
+    @media (max-width: 600px) {
+      .kpi { grid-template-columns: 1fr; gap: 6px; }
+    }
     .kpi .box { background: #0c142e; border: 1px solid var(--line); border-radius: 10px; padding: 10px }
     .box h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted) }
     .box .v { font-size: 14px; font-weight: 700 }
@@ -42,6 +71,12 @@
     .log .type-warn { color: #fcd34d }
     .log .type-err { color: #fca5a5 }
     .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px; margin: 6px 0 }
+
+    /* Responsive key-value pairs */
+    @media (max-width: 480px) {
+      .kv { grid-template-columns: 1fr; gap: 4px; }
+      .kv div:first-child { font-weight: 600; background: transparent; border: none; padding: 2px 0; }
+    }
     .kv div { padding: 4px 6px; background: #0c142e; border: 1px solid var(--line); border-radius: 8px }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 8px; background: #0a132f; color: #c7d2fe; border: 1px solid #374151 }
     .muted { color: var(--muted) }
