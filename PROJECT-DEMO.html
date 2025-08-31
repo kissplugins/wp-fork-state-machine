@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive FSM Decision Maker Demo</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --brand:#6366f1; --brand-2:#22d3ee; --ok:#10b981; --warn:#f59e0b; --err:#ef4444;
+      --card:#0b1020; --line:#1f2937; --chip:#0b122a; --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;padding:24px;background:linear-gradient(135deg,var(--bg),#060913);color:var(--text);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;}
+    h1{margin:0 0 2px;font-size:28px}
+    .sub{margin:0 0 20px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns: 360px 1fr 420px;gap:18px}
+    @media (max-width:1200px){.grid{grid-template-columns:1fr}}
+    .card{background:linear-gradient(180deg,#0b1020,#0a0f1e 70%);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+    .card h2{font-size:16px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line);color:#fff;background:linear-gradient(90deg,rgba(99,102,241,.15),rgba(34,211,238,.08))}
+    .card .body{padding:14px}
+    .row{display:flex;gap:10px;align-items:center}
+    .row.wrap{flex-wrap:wrap}
+    .hint{color:var(--muted);font-size:12px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-weight:600;border:1px solid var(--line)}
+    .pill.ok{background:rgba(16,185,129,.12);color:#34d399;border-color:rgba(16,185,129,.25)}
+    .pill.warn{background:rgba(245,158,11,.1);color:#fbbf24;border-color:rgba(245,158,11,.25)}
+    .pill.err{background:rgba(239,68,68,.12);color:#fca5a5;border-color:rgba(239,68,68,.25)}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+    button, .btn{appearance:none;border:1px solid var(--line);background:#0f152b;color:#e5e7eb;border-radius:10px;padding:8px 10px;font-weight:600;cursor:pointer}
+    button:hover{border-color:#22314e;background:#0e1430}
+    .btn-ghost{background:transparent}
+    .btn-brand{background:linear-gradient(90deg,#4f46e5,#06b6d4);border-color:transparent}
+    .btn-danger{background:linear-gradient(90deg,#ef4444,#f97316);border-color:transparent}
+    .switch{display:inline-flex;align-items:center;gap:8px}
+    .switch input{appearance:none;width:40px;height:22px;background:#182036;border-radius:999px;position:relative;outline:0;border:1px solid var(--line);cursor:pointer}
+    .switch input:checked{background:linear-gradient(90deg,#4f46e5,#06b6d4)}
+    .switch input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+    .switch input:checked::after{left:20px}
+    .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+    .kpi .box{background:#0c142e;border:1px solid var(--line);border-radius:10px;padding:10px}
+    .box h4{margin:0 0 4px;font-size:12px;color:var(--muted)}
+    .box .v{font-size:14px;font-weight:700}
+    .list{display:flex;flex-direction:column;gap:6px}
+    .chip{display:inline-flex;gap:6px;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25)}
+    .log{background:#0a0e1e;border:1px solid var(--line);border-radius:10px;padding:10px;height:280px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+    .log .i{opacity:.9}
+    .log .ts{color:#64748b}
+    .log .type-info{color:#a5b4fc}
+    .log .type-warn{color:#fcd34d}
+    .log .type-err{color:#fca5a5}
+    .kv{display:grid;grid-template-columns:120px 1fr;gap:6px;margin:6px 0}
+    .kv div{padding:4px 6px;background:#0c142e;border:1px solid var(--line);border-radius:8px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:8px;background:#0a132f;color:#c7d2fe;border:1px solid #374151}
+    .muted{color:var(--muted)}
+    .divider{height:1px;background:linear-gradient(90deg,transparent,#1f2937,transparent);margin:10px 0}
+    .sr-only{position:absolute;left:-9999px}
+  </style>
+</head>
+<body>
+  <h1>Interactive FSM Decision Maker</h1>
+  <p class="sub">A hands-on tool that combines: (1) a decision tree to choose FSM vs. non-FSM, (2) a working FSM simulator, and (3) a behind-the-scenes status panel.</p>
+
+  <div class="grid" id="app">
+    <!-- Instructions -->
+<div class="card">
+  <h2>Instructions</h2>
+  <div class="body">
+    <p>The plugin has been created in the <code>fsm-decision-demo</code> directory. To use it, you need to:</p>
+    <ol>
+      <li>Run <code>composer install</code> in the <code>fsm-decision-demo</code> directory to install the dependencies.</li>
+      <li>Activate the plugin in your WordPress admin panel.</li>
+      <li>Add the shortcode <code>[fsm_decision_demo]</code> to any page or post.</li>
+    </ol>
+  </div>
+</div>
+    <section class="card" id="decision-card" aria-labelledby="decision-title">
+      <h2 id="decision-title">Decision Maker</h2>
+      <div class="body">
+        <div class="hint">Score the scenario. If you check <strong>3+</strong>, prefer an FSM.</div>
+        <div class="list" id="scorecard">
+          <label class="row"><input type="checkbox" data-key="hasStates"> <span>3+ distinct states with business meaning</span></label>
+          <label class="row"><input type="checkbox" data-key="hasGuards"> <span>Transitions have guards (validation/permissions)</span></label>
+          <label class="row"><input type="checkbox" data-key="hasEffects"> <span>Transitions trigger side effects (emails/webhooks/ledgers)</span></label>
+          <label class="row"><input type="checkbox" data-key="isAsync"> <span>Async or multi-actor (cron/webhooks/admin UI)</span></label>
+          <label class="row"><input type="checkbox" data-key="needsRollback"> <span>Needs rollback/compensation or at-least-once delivery</span></label>
+        </div>
+        <div class="divider"></div>
+        <div class="hint">Signals to avoid an FSM (strong negatives)</div>
+        <div class="list">
+          <label class="row"><input type="checkbox" data-key="isBinary"> <span>Simple binary toggle</span></label>
+          <label class="row"><input type="checkbox" data-key="isStateless"> <span>Stateless operation (no history)</span></label>
+          <label class="row"><input type="checkbox" data-key="isOneShot"> <span>One-time fire-and-forget</span></label>
+          <label class="row"><input type="checkbox" data-key="isReadOnly"> <span>Read-only display</span></label>
+          <label class="row"><input type="checkbox" data-key="isTiny"> <span>Truly tiny feature where FSM adds no clarity</span></label>
+        </div>
+        <div class="divider"></div>
+        <div class="row wrap">
+          <div id="decision-pill" class="pill warn" aria-live="polite">Result: TBD</div>
+          <button class="btn-ghost" id="explain-btn" title="Explain decision">Explain</button>
+          <button class="btn-brand" id="apply-btn" title="Apply to simulator">Apply to Simulator</button>
+          <button id="reset-score" class="btn">Reset</button>
+        </div>
+        <div id="decision-explain" class="hint" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- FSM Simulator -->
+    <section class="card" id="sim-card" aria-labelledby="sim-title">
+      <h2 id="sim-title">FSM Simulator (Upload Flow)</h2>
+      <div class="body">
+        <div class="row wrap" style="justify-content:space-between; gap:12px;">
+          <div class="row" role="group" aria-label="Mode">
+            <span class="muted">Mode:</span>
+            <label class="switch"><input type="checkbox" id="mode-toggle"><span class="muted">&nbsp;</span></label>
+            <span id="mode-label" class="badge" title="True FSM enforces transitions; FSM-like allows direct mutations">True FSM</span>
+          </div>
+          <div class="kpi">
+            <div class="box"><h4>Current State</h4><div class="v" id="state-badge">idle</div></div>
+            <div class="box"><h4>Allowed Events</h4><div class="v" id="allowed-events">START</div></div>
+            <div class="box"><h4>Last Event</h4><div class="v" id="last-event">—</div></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="hint">Events</div>
+        <div class="controls" id="event-buttons" role="group" aria-label="Events">
+          <button data-ev="START" class="btn-brand">START</button>
+          <button data-ev="PROGRESS">PROGRESS</button>
+          <button data-ev="SUCCESS">SUCCESS</button>
+          <button data-ev="FAIL_TEMP">FAIL_TEMP</button>
+          <button data-ev="FAIL_PERM" class="btn-danger">FAIL_PERM</button>
+          <button data-ev="RETRY">RETRY</button>
+          <button data-ev="ABORT" class="btn-danger">ABORT</button>
+          <button data-ev="RESET" class="btn">RESET</button>
+        </div>
+
+        <div class="divider"></div>
+        <div class="hint">Guards (simulate prerequisites)</div>
+        <div class="row wrap">
+          <label class="switch"><input type="checkbox" id="g-file-ok" checked><span></span></label><span>File type OK (needed for <code>uploading → processing</code>)</span>
+        </div>
+        <div class="row wrap" style="margin-top:6px">
+          <label class="switch"><input type="checkbox" id="g-optimize-ok"><span></span></label><span>Optimization complete (needed for <code>processing → done</code>)</span>
+        </div>
+
+        <div class="divider"></div>
+        <div class="row wrap">
+          <button id="double-fire" class="btn">Simulate Two Events at Once</button>
+          <button id="clear-log" class="btn-ghost">Clear Log</button>
+          <button id="export-json" class="btn-ghost">Export JSON</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Behind the Scenes -->
+    <section class="card" id="status-card" aria-labelledby="status-title">
+      <h2 id="status-title">Behind the Scenes</h2>
+      <div class="body">
+        <div class="kv"><div>Lock</div><div id="lock-status">unlocked</div></div>
+        <div class="kv"><div>Queue</div><div id="queue-size">0</div></div>
+        <div class="kv"><div>Observers</div><div>
+          <label class="row"><input type="checkbox" id="obs-email" checked> <span>Send email on <code>done</code></span></label>
+          <label class="row"><input type="checkbox" id="obs-webhook" checked> <span>Emit webhook on any transition</span></label>
+          <label class="row"><input type="checkbox" id="obs-job"> <span>Enqueue job on <code>processing</code></span></label>
+        </div></div>
+        <div class="divider"></div>
+        <div class="log" id="log" aria-live="polite" aria-label="Transition log"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  (function(){
+    const ssKey = 'fsm-demo-v1';
+
+    function now(){return new Date().toLocaleTimeString()}
+    function el(id){return document.getElementById(id)}
+    function ceil(n){return Math.max(0,Math.ceil(n))}
+
+    // --- FSM definition (kept entirely in JS for this session) ---
+    const fsmConfig = {
+      states: ['idle','uploading','processing','failed_retryable','retrying','done','failed_permanent'],
+      initial: 'idle',
+      transitions: {
+        idle: { START: 'uploading', RESET: 'idle' },
+        uploading: { PROGRESS: 'uploading', SUCCESS: 'processing', FAIL_TEMP: 'failed_retryable', FAIL_PERM: 'failed_permanent', ABORT: 'failed_permanent', RESET: 'idle' },
+        processing: { SUCCESS: 'done', FAIL_TEMP: 'failed_retryable', ABORT: 'failed_permanent', RESET: 'idle' },
+        failed_retryable: { RETRY: 'uploading', RESET: 'idle' },
+        retrying: { /* example placeholder if needed */ RESET: 'idle' },
+        done: { RESET: 'idle' },
+        failed_permanent: { RESET: 'idle' }
+      },
+      guards: {
+        'uploading->processing': ()=> el('g-file-ok').checked ? {ok:true} : {ok:false, msg:'File type not allowed'},
+        'processing->done': ()=> el('g-optimize-ok').checked ? {ok:true} : {ok:false, msg:'Optimization not complete'}
+      }
+    };
+
+    // --- Logger ---
+    const logEl = el('log');
+    const log = [];
+    function logPush(type, msg, extra){
+      const entry = { ts: Date.now(), type, msg, extra };
+      log.unshift(entry);
+      if(log.length>400) log.pop();
+      renderLog();
+      persist();
+    }
+    function renderLog(){
+      logEl.innerHTML = log.map(e=>`<div class="i"><span class="ts">[${new Date(e.ts).toLocaleTimeString()}]</span> <span class="type-${e.type}">${e.type.toUpperCase()}</span> — ${e.msg}${e.extra?` <span class="muted">${escapeHtml(JSON.stringify(e.extra))}</span>`:''}</div>`).join('');
+    }
+
+    // --- FSM engine ---
+    const engine = {
+      state: fsmConfig.initial,
+      locked: false,
+      queue: [],
+      modeTrue: true, // true = True FSM; false = FSM-like
+      dispatch(event){
+        if(this.locked){ logPush('warn', `Engine locked; queued event ${event}`); this.queue.push(event); updateStatus(); return; }
+        this.locked = true; updateStatus();
+        const from = this.state;
+        const next = (fsmConfig.transitions[from]||{})[event];
+        const allowed = next !== undefined;
+        if(!this.modeTrue){
+          // FSM-like: allow any mutation; pick next if defined, else mutate to event name as a pretend state (demo of danger)
+          if(allowed){
+            if(!this.guardOK(from,next,event,false)) { /* warn only */ }
+            this.commit(next, event, {allowed:true});
+          } else {
+            // simulate a direct mutation risk
+            logPush('warn', `Illegal event '${event}' from '${from}' — mutating anyway (FSM-like)`);
+            this.commit(from, event, {mutated:true}); // stay put but show risk
+          }
+        } else {
+          if(!allowed){ this.locked=false; updateStatus(); logPush('err', `Illegal event '${event}' from '${from}' (blocked)`); this.drain(); return; }
+          const ok = this.guardOK(from,next,event,true);
+          if(!ok){ this.locked=false; updateStatus(); this.drain(); return; }
+          this.commit(next, event, {allowed:true});
+        }
+      },
+      guardOK(from,to,event,blocking){
+        const key = `${from}->${to}`;
+        if(fsmConfig.guards[key]){
+          const g = fsmConfig.guards[key]();
+          if(!g.ok){
+            if(blocking){ logPush('err', `Guard failed for ${from} → ${to}: ${g.msg}`); }
+            else { logPush('warn', `Guard would fail (${from} → ${to}): ${g.msg}`); }
+            return false;
+          }
+        }
+        return true;
+      },
+      commit(to,event,meta){
+        const from = this.state;
+        this.state = to;
+        updateUiState(from,event,to);
+        // observers
+        if(el('obs-webhook').checked){ logPush('info', `Webhook emitted`, {from,to,event}); }
+        if(el('obs-email').checked && to==='done'){ logPush('info', `Email sent: Upload Complete`, {to}); }
+        if(el('obs-job').checked && to==='processing'){ logPush('info', `Job enqueued: optimize assets`, {to}); }
+        this.locked = false; updateStatus(); this.drain(); persist();
+      },
+      drain(){
+        if(this.queue.length===0) return;
+        const e = this.queue.shift();
+        logPush('info', `Draining queued event ${e}`);
+        this.dispatch(e);
+      }
+    };
+
+    // --- UI wiring ---
+    const stateBadge = el('state-badge');
+    const lastEvent = el('last-event');
+    const allowedEvents = el('allowed-events');
+    const lockStatus = el('lock-status');
+    const queueSize = el('queue-size');
+
+    function updateStatus(){
+      lockStatus.textContent = engine.locked? 'locked':'unlocked';
+      queueSize.textContent = String(engine.queue.length);
+    }
+
+    function updateButtons(){
+      const btns = document.querySelectorAll('#event-buttons button');
+      const allowed = fsmConfig.transitions[engine.state] || {};
+      btns.forEach(b=>{
+        const ev = b.dataset.ev;
+        const isAllowed = !!allowed[ev];
+        if(engine.modeTrue){
+          // in True FSM mode, disable disallowed buttons except RESET
+          b.disabled = !(isAllowed || ev==='RESET' || ev==='PROGRESS');
+          b.title = b.disabled? 'Not allowed in this state' : '';
+        } else {
+          b.disabled = false; b.title = '';
+        }
+      });
+      allowedEvents.textContent = Object.keys(allowed).join(', ') || '—';
+    }
+
+    function updateUiState(from,event,to){
+      stateBadge.textContent = engine.state;
+      lastEvent.textContent = event || '—';
+      updateButtons();
+      if(event){ logPush('info', `${from} → ${to} via ${event}`); }
+    }
+
+    // Event buttons
+    document.querySelectorAll('#event-buttons button').forEach(btn=>{
+      btn.addEventListener('click', ()=> engine.dispatch(btn.dataset.ev));
+    });
+
+    // Mode toggle
+    el('mode-toggle').addEventListener('change', (e)=>{
+      engine.modeTrue = !e.target.checked; // checked = FSM-like
+      el('mode-label').textContent = engine.modeTrue? 'True FSM':'FSM-like';
+      logPush('info', `Mode set to ${engine.modeTrue? 'True FSM':'FSM-like'}`);
+      updateButtons();
+      persist();
+    });
+
+    // Double fire
+    el('double-fire').addEventListener('click', ()=>{
+      // attempt to fire SUCCESS and FAIL_TEMP at same time
+      engine.dispatch('SUCCESS');
+      setTimeout(()=> engine.dispatch('FAIL_TEMP'), 0);
+    });
+
+    // Clear log & export
+    el('clear-log').addEventListener('click', ()=>{ log.length=0; renderLog(); });
+    el('export-json').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify({state:engine.state,log,config:fsmConfig}, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'fsm-session.json'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // --- Decision maker logic ---
+    const scoreDefaults = {hasStates:false,hasGuards:false,hasEffects:false,isAsync:false,needsRollback:false,isBinary:false,isStateless:false,isOneShot:false,isReadOnly:false,isTiny:false};
+    const scoreInputs = document.querySelectorAll('#scorecard input, #decision-card .list input');
+
+    function computeDecision(){
+      const s = readScores();
+      const positives = ['hasStates','hasGuards','hasEffects','isAsync','needsRollback'].filter(k=>s[k]).length;
+      const negatives = ['isBinary','isStateless','isOneShot','isReadOnly','isTiny'].filter(k=>s[k]).length;
+      let verdict='Maybe', style='warn', explain=[];
+      if(positives>=3 && negatives<=1){ verdict='Use FSM'; style='ok'; }
+      else if(positives<=1 || negatives>=3){ verdict='Avoid FSM'; style='err'; }
+      else { verdict='Maybe'; style='warn'; }
+      if(positives>0) explain.push(`Positives: ${positives} (${listChecked(['hasStates','hasGuards','hasEffects','isAsync','needsRollback'], s)})`);
+      if(negatives>0) explain.push(`Negatives: ${negatives} (${listChecked(['isBinary','isStateless','isOneShot','isReadOnly','isTiny'], s)})`);
+      return {verdict, style, explain: explain.join(' · ')};
+    }
+
+    function listChecked(keys, s){
+      const map={hasStates:'3+ states',hasGuards:'guards',hasEffects:'side effects',isAsync:'async/multi-actor',needsRollback:'rollback',isBinary:'binary',isStateless:'stateless',isOneShot:'one-shot',isReadOnly:'read-only',isTiny:'tiny'};
+      return keys.filter(k=>s[k]).map(k=>map[k]).join(', ');
+    }
+
+    function readScores(){
+      const saved = load().scores || {};
+      const s = Object.assign({}, scoreDefaults, saved);
+      // sync from DOM
+      document.querySelectorAll('#decision-card input[type="checkbox"]').forEach(inp=>{
+        const key = inp.dataset.key; if(key){ s[key] = inp.checked; }
+      });
+      return s;
+    }
+
+    function writeScores(s){
+      document.querySelectorAll('#decision-card input[type="checkbox"]').forEach(inp=>{
+        const key = inp.dataset.key; if(key){ inp.checked = !!s[key]; }
+      });
+    }
+
+    function updateDecision(){
+      const {verdict, style, explain} = computeDecision();
+      const pill = el('decision-pill');
+      pill.className = `pill ${style}`;
+      pill.textContent = `Result: ${verdict}`;
+      el('decision-explain').textContent = explain;
+    }
+
+    scoreInputs.forEach(inp=> inp.addEventListener('change', ()=>{ updateDecision(); persist(); }));
+    el('explain-btn').addEventListener('click', updateDecision);
+    el('apply-btn').addEventListener('click', ()=>{
+      const v = computeDecision().verdict;
+      if(v==='Use FSM'){ el('mode-toggle').checked = false; el('mode-toggle').dispatchEvent(new Event('change')); }
+      if(v==='Avoid FSM'){ el('mode-toggle').checked = true; el('mode-toggle').dispatchEvent(new Event('change')); }
+      logPush('info', `Decision applied to simulator: ${v}`);
+    });
+    el('reset-score').addEventListener('click', ()=>{ writeScores(scoreDefaults); updateDecision(); persist(); });
+
+    // --- Persistence ---
+    function persist(){
+      const data = {
+        state: engine.state,
+        modeTrue: engine.modeTrue,
+        scores: readScores(),
+        guards: { fileOk: el('g-file-ok').checked, optimizeOk: el('g-optimize-ok').checked },
+        observers: { email: el('obs-email').checked, webhook: el('obs-webhook').checked, job: el('obs-job').checked },
+        log
+      };
+      sessionStorage.setItem(ssKey, JSON.stringify(data));
+    }
+    function load(){
+      try{ return JSON.parse(sessionStorage.getItem(ssKey)||'{}'); }catch(e){ return {}; }
+    }
+
+    function restore(){
+      const data = load();
+      if(data && data.state){ engine.state = data.state; }
+      if(typeof data.modeTrue==='boolean'){ engine.modeTrue = data.modeTrue; el('mode-toggle').checked = !engine.modeTrue; el('mode-label').textContent = engine.modeTrue? 'True FSM':'FSM-like'; }
+      if(data.guards){ el('g-file-ok').checked = !!data.guards.fileOk; el('g-optimize-ok').checked = !!data.guards.optimizeOk; }
+      if(data.observers){ el('obs-email').checked = !!data.observers.email; el('obs-webhook').checked = !!data.observers.webhook; el('obs-job').checked = !!data.observers.job; }
+      if(Array.isArray(data.log)){ log.splice(0, log.length, ...data.log); renderLog(); }
+      writeScores(Object.assign({}, scoreDefaults, data.scores||{}));
+      updateUiState(null,null,engine.state); updateStatus(); updateDecision();
+    }
+
+    // --- Utilities ---
+    function escapeHtml(s){ return s && s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])) }
+
+    // init
+    restore(); updateButtons();
+  })();
+  </script>
+</body>
+</html>

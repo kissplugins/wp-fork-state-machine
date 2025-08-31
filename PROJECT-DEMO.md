@@ -5,7 +5,8 @@ This document is a **standalone reference** for building a WordPress plugin that
 
 ---
 
-## 0) Background: Why FSMs in WordPress?
+## 0) Background: Why FSMs in WordPress? (Status: Completed)
+
 
 Finite State Machines (FSMs) are formal models of computation used to manage systems with distinct states and explicit transitions between them. In WordPress plugin development, FSMs can be used for:
 
@@ -18,7 +19,7 @@ FSMs provide **clarity, testability, and safety** by preventing illegal transiti
 
 ---
 
-## 1) Project Objectives
+## 1) Project Objectives (Status: Completed)
 
 1. Package an **interactive FSM Decision Maker** demo as a WordPress plugin.  
 2. Expose the demo via a shortcode `[fsm_decision_demo]`.  
@@ -28,7 +29,7 @@ FSMs provide **clarity, testability, and safety** by preventing illegal transiti
 
 ---
 
-## 2) Do We Need a Front-End FSM?
+## 2) Do We Need a Front-End FSM? (Status: Completed)
 
 Yes — for responsiveness and pedagogy. The architecture will be **hybrid**:
 
@@ -40,7 +41,7 @@ This shows both the **discipline of FSMs** and the risks of bypassing them.
 
 ---
 
-## 3) Plugin Structure
+## 3) Plugin Structure (Status: Completed)
 
 ```
 wp-content/plugins/
@@ -63,7 +64,7 @@ wp-content/plugins/
 
 ---
 
-## 4) Backend FSM (PHP)
+## 4) Backend FSM (PHP) (Status: Completed)
 
 We define a demo FSM called **media_upload** with the following states and transitions:
 
@@ -109,7 +110,7 @@ class Graphs {
 
 ---
 
-## 5) Persistence Layer
+## 5) Persistence Layer (Status: Completed)
 
 For demo purposes, create a **custom table**:
 
@@ -151,7 +152,7 @@ class Store {
 
 ---
 
-## 6) REST API Endpoints
+## 6) REST API Endpoints (Status: Completed)
 
 Namespace: `kiss-fsm/v1`
 
@@ -178,7 +179,7 @@ register_rest_route('kiss-fsm/v1', '/jobs/(?P<id>\d+)/transition', [
 
 ---
 
-## 7) Frontend FSM (JavaScript)
+## 7) Frontend FSM (JavaScript) (Status: Completed)
 
 The frontend replicates the same states and transitions. It manages:
 
@@ -235,7 +236,7 @@ The frontend replicates the same states and transitions. It manages:
 
 ---
 
-## 8) Shortcode Implementation
+## 8) Shortcode Implementation (Status: Completed)
 
 **Shortcodes.php:**
 ```php
@@ -274,7 +275,7 @@ class Shortcodes {
 
 ---
 
-## 9) CSS Styling (assets/css/demo.css)
+## 9) CSS Styling (assets/css/demo.css) (Status: Completed)
 
 ```css
 .fsm-demo { background:#0b1020; color:#e5e7eb; padding:1rem; border-radius:10px; }
